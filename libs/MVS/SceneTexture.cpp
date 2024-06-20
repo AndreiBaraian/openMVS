@@ -63,7 +63,8 @@ using namespace MVS;
 // method used to find optimal view per face
 #define TEXOPT_INFERENCE_LBP 1
 #define TEXOPT_INFERENCE_TRWS 2
-#define TEXOPT_INFERENCE TEXOPT_INFERENCE_LBP
+#define TEXOPT_INFERENCE_MAPMAP 3
+#define TEXOPT_INFERENCE TEXOPT_INFERENCE_MAPMAP
 
 // inference algorithm
 #if TEXOPT_INFERENCE == TEXOPT_INFERENCE_LBP
@@ -125,6 +126,9 @@ struct TRWSInference {
 }
 #endif
 
+#if TEXOPT_INFERENCE == TEXOPT_INFERENCE_MAPMAP
+#include <mapmap/full.h>
+#endif
 
 // S T R U C T S ///////////////////////////////////////////////////
 
@@ -1258,6 +1262,96 @@ bool MeshTexture::FaceViewSelection(unsigned minCommonCameras, float fOutlierThr
 					ASSERT(label < images.size()+1);
 					if (label > 0)
 						labels[l] = label-1;
+				}
+				#endif
+
+				#if TEXOPT_INFERENCE == TEXOPT_INFERENCE_MAPMAP
+				using cost_t = float;
+				const NS_MAPMAP::uint_t simd_w = NS_MAPMAP::sys_max_simd_width<cost_t>();
+
+				NS_MAPMAP::Graph<cost_t> mapmap_graph(faces.size());
+				
+				EdgeOutIter ei, eie;
+				FOREACH(f, faces) {
+					for (boost::tie(ei, eie) = boost::out_edges(f, graph); ei != eie; ++ei) {
+						ASSERT(f == (FIndex)ei->m_source);
+						const std::size_t fAdj((size_t)ei->m_target);
+						if (f < fAdj)
+							mapmap_graph.add_edge((size_t)f, fAdj, 1.0f);
+					}
+				}
+
+				mapmap_graph.update_components();
+
+				using unary_t = NS_MAPMAP::UnaryTable<cost_t, simd_w>;
+				std::vector<unary_t> unaries;
+
+				unaries.reserve(faces.size());
+
+				NS_MAPMAP::LabelSet<cost_t, simd_w> label_set(faces.size(), false);
+				
+				FOREACH(f, faces) {
+					const FaceDataArr& faceDatas = facesDatas[f];
+					std::vector<NS_MAPMAP::_iv_st<cost_t, simd_w>> labels_mapmap;
+					labels_mapmap.reserve(faceDatas.size());
+					for (const FaceData& faceData : faceDatas) {
+						const Label label((Label)faceData.idxView + 1);
+						labels_mapmap.push_back((NS_MAPMAP::uint_t)label);
+					}
+					if (labels_mapmap.empty())
+						labels_mapmap.push_back(0);
+					std::sort(labels_mapmap.begin(), labels_mapmap.end());
+					label_set.set_label_set_for_node(f, labels_mapmap);
+				}
+
+				FOREACH(f, faces) {
+					const FaceDataArr& faceDatas = facesDatas[f];
+					std::vector < NS_MAPMAP::_s_t<cost_t, simd_w>> costs;
+					costs.reserve(faceDatas.size());
+					for (const FaceData& faceData : faceDatas) {
+						const float normalizedQuality(faceData.quality >= normQuality ? 1.0f : faceData.quality / normQuality);
+						const float dataCost(1.f - normalizedQuality);
+						costs.push_back(dataCost);
+					}
+					if (costs.empty())
+						costs.push_back(1.0f);
+					unaries.emplace_back((NS_MAPMAP::luint_t)f, &label_set);
+					unaries.back().set_costs(costs);
+				}
+				
+				using pairwise_t = NS_MAPMAP::PairwisePotts<cost_t, simd_w>;
+				pairwise_t pairwise(1.0f);
+
+				NS_MAPMAP::mapMAP_control ctr;
+				ctr.use_multilevel = true;
+				ctr.use_spanning_tree = true;
+				ctr.use_acyclic = true;
+				ctr.spanning_tree_multilevel_after_n_iterations = 5;
+				ctr.force_acyclic = true;
+				ctr.min_acyclic_iterations = 5;
+				ctr.relax_acyclic_maximal = true;
+				ctr.tree_algorithm = NS_MAPMAP::LOCK_FREE_TREE_SAMPLER;
+
+				NS_MAPMAP::StopWhenReturnsDiminish<cost_t, simd_w> terminate(5, 0.01);
+				std::vector<NS_MAPMAP::_iv_st<cost_t, simd_w>> solution;
+				NS_MAPMAP::mapMAP<cost_t, simd_w> solver;
+
+				solver.set_graph(&mapmap_graph);
+				solver.set_label_set(&label_set);
+				FOREACH(f, faces) {
+					solver.set_unary((NS_MAPMAP::luint_t)f, &unaries[f]);
+				}
+				solver.set_pairwise(&pairwise);
+				solver.set_termination_criterion(&terminate);
+
+				solver.optimize(solution, ctr);
+				
+				labels.Memset(0xFF);
+				FOREACH(f, faces) {
+					int label = label_set.label_from_offset(f, solution[f]);
+					ASSERT(label < images.size() + 1);
+					if (label > 0)
+						labels[f] = label - 1;
 				}
 				#endif
 

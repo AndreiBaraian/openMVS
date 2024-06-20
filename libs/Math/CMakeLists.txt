@@ -1,3 +1,14 @@
+externalproject_add(ext_mapmap
+    PREFIX          ext_mapmap
+    GIT_REPOSITORY  https://github.com/dthuerck/mapmap_cpu.git
+    GIT_TAG         origin/master
+    UPDATE_COMMAND  ""
+    SOURCE_DIR      ${CMAKE_SOURCE_DIR}/libs/Math/mapmap
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND   ""
+    INSTALL_COMMAND ""
+)
+
 INCLUDE_DIRECTORIES(".")
 
 # List sources files

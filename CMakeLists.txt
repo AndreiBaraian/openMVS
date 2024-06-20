@@ -63,6 +63,7 @@ ENDIF()
 
 # Define helper functions and macros.
 INCLUDE(build/Utils.cmake)
+INCLUDE(ExternalProject)
 
 # Init session with macros defined in Utils.cmake
 GetOperatingSystemArchitectureBitness(SYSTEM)
@@ -226,6 +227,11 @@ else()
 	MESSAGE("-- Can't find OpenCV. Please specify OpenCV directory using OpenCV_DIR variable")
 endif()
 
+FIND_PACKAGE(TBB REQUIRED)
+if(TBB_FOUND)
+    message("TBB ${TBB_VERSION} found.")
+endif()
+
 LIST(REMOVE_DUPLICATES OpenMVS_EXTRA_INCLUDES)
 LIST(REMOVE_DUPLICATES OpenMVS_EXTRA_LIBS)
 
@@ -248,6 +254,12 @@ endif()
 
 INCLUDE_DIRECTORIES("${OpenMVS_SOURCE_DIR}")
 INCLUDE_DIRECTORIES("${CMAKE_BINARY_DIR}")
+
+set(MAPMAP_DIR "${CMAKE_SOURCE_DIR}/libs/Math/mapmap")
+include_directories(
+    ${MAPMAP_DIR}
+    ${MAPMAP_DIR}/mapmap
+    ${MAPMAP_DIR}/ext)
 
 # Add modules
 ADD_SUBDIRECTORY(libs)

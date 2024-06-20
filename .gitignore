@@ -37,3 +37,6 @@ CMakeSettings.json
 out/
 bin*/
 make*/
+
+# mapmap_cpu library
+libs/Math/mapmap
