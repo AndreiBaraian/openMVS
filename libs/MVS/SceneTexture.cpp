@@ -1296,7 +1296,7 @@ bool MeshTexture::FaceViewSelection(unsigned minCommonCameras, float fOutlierThr
 					labels_mapmap.reserve(faceDatas.size());
 					for (const FaceData& faceData : faceDatas) {
 						const Label label((Label)faceData.idxView + 1);
-						labels_mapmap.push_back((NS_MAPMAP::uint_t)label);
+						labels_mapmap.push_back(label);
 					}
 					if (labels_mapmap.empty())
 						labels_mapmap.push_back(0);
@@ -1315,7 +1315,7 @@ bool MeshTexture::FaceViewSelection(unsigned minCommonCameras, float fOutlierThr
 					}
 					if (costs.empty())
 						costs.push_back(1.0f);
-					unaries.emplace_back((NS_MAPMAP::luint_t)f, &label_set);
+					unaries.emplace_back(f, &label_set);
 					unaries.back().set_costs(costs);
 				}
 				
